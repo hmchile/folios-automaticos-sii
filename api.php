@@ -84,13 +84,29 @@ if ($certContent === false) {
 $certPath = $tempDir . '/certificado.pem';
 file_put_contents($certPath, $certContent);
 
-// Preparar la configuración
+// Configurar el servidor a utilizar a partir del parámetro "ambiente"
+// Mapear: certificacion => maullin, produccion => palena
+$servidor = 'palena'; // Valor por defecto: produccion (palena)
+if (isset($data['ambiente']) && !empty($data['ambiente'])) {
+    $ambiente = strtolower($data['ambiente']);
+    if ($ambiente === 'certificacion') {
+        $servidor = 'maullin';
+    } elseif ($ambiente === 'produccion') {
+        $servidor = 'palena';
+    }
+} elseif (isset($data['servidor']) && !empty($data['servidor'])) {
+    $servidor = $data['servidor'];
+} elseif (isset($config['servidor']) && !empty($config['servidor'])) {
+    $servidor = $config['servidor'];
+}
+
+// Preparar la configuración para el servicio
 $serviceConfig = [
     'pem' => $certPath,
     'pass' => $data['certificadoPassword'],
     'rutCert' => $data['rutCert'],
     'rutEmpresa' => $data['rutEmpresa'],
-    'servidor' => $data['servidor'] ?? $config['servidor'] ?? 'maullin',
+    'servidor' => $servidor,
     'foliosPath' => $config['foliosPath'] ?? __DIR__ . '/storage/folios/',
     'enableLogging' => $data['enableLogging'] ?? $config['enableLogging'] ?? true,
     'logPath' => $config['logPath'] ?? __DIR__ . '/storage/logs/',
@@ -98,8 +114,8 @@ $serviceConfig = [
     'debugPath' => $config['debugPath'] ?? __DIR__ . '/storage/debug/',
 ];
 
-// Instanciar el servicio con la configuración
 try {
+    // Instanciar el servicio con la configuración
     $foliosService = new FoliosService($serviceConfig);
 
     // Solicitar folios
