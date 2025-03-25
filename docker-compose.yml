@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sii-folios-service
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - SII_SERVIDOR=maullin
+      - FOLIOS_PATH=/var/www/html/storage/folios/
+      - LOG_PATH=/var/www/html/storage/logs/
+      - DEBUG_PATH=/var/www/html/storage/debug/
+      - ENABLE_LOGGING=true
+      - ENABLE_HTML_DEBUG=true
+    volumes:
+      - ./storage:/var/www/html/storage

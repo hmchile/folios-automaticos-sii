@@ -1,0 +1,27 @@
+# Redirigir todas las solicitudes a api.php
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ api.php [QSA,L]
+</IfModule>
+
+# Configuración de seguridad adicional
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# Permitir acceso solo a los archivos necesarios
+<FilesMatch "^(api\.php)$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>
+
+# Denegar acceso a archivos de configuración y directorios sensibles
+<FilesMatch "^(config\.php|composer\.json|composer\.lock|\.)">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>

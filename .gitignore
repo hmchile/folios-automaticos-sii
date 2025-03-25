@@ -1,0 +1,8 @@
+/vendor/
+/storage/*
+!/storage/.gitkeep
+.env
+.idea
+.vscode
+composer.lock
+/certs/         # Esta línea intenta ignorar la carpeta certs completa

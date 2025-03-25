@@ -1,0 +1,17 @@
+{
+    "name": "hmarket/folios-service",
+    "description": "Servicio para obtener folios del SII",
+    "type": "project",
+    "require": {
+        "php": "^8.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "ext-openssl": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "SiiService\\": "src/"
+        }
+    },
+    "minimum-stability": "stable"
+}
