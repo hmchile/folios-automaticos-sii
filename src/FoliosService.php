@@ -30,8 +30,8 @@ class FoliosService
         $this->servidor = $config['servidor'] ?? "maullin";
         $this->foliosPath = $config['foliosPath'] ?? __DIR__ . '/../storage/folios/';
         $this->logPath = $config['logPath'] ?? __DIR__ . '/../storage/logs/';
-        $this->enableLogging = $config['enableLogging'] ?? true;
-        $this->enableHtmlDebug = $config['enableHtmlDebug'] ?? true;
+        $this->enableLogging = true;
+        $this->enableHtmlDebug = true;
         $this->debugPath = $config['debugPath'] ?? __DIR__ . '/../storage/debug/';
 
         // Asegurar que existan los directorios necesarios
@@ -58,6 +58,50 @@ class FoliosService
         if ($this->enableLogging) {
             $this->log("ID de sesión de debug: " . $this->sessionId);
         }
+    }
+
+    /**
+     * Extrae los datos de la sección "Timbraje Anterior" del HTML.
+     * 
+     * @param string $html Contenido HTML a analizar
+     * @return array Arreglo con 'success' y, en caso de éxito, 'data' con los campos extraídos
+     */
+    private function parseTimbrajeAnterior(string $html)
+    {
+        // Verificar si existe la sección "Timbraje Anterior"
+        if (strpos($html, 'Timbraje Anterior') === false) {
+            return [
+                'success' => false,
+                'message' => 'No se encontró la sección "Timbraje Anterior"'
+            ];
+        }
+
+        $data = [];
+        // Definir los campos a extraer y el índice de salida deseado
+        $fields = [
+            'Fecha Timbraje'    => 'fecha_timbraje',
+            'Mandatario'        => 'mandatario',
+            'Cantidad Timbrada' => 'cantidad_timbrada',
+            'Folio Inicial'     => 'folio_inicial',
+            'Folio Final'       => 'folio_final'
+        ];
+
+        // Para cada campo, se busca el valor en la fila correspondiente
+        foreach ($fields as $label => $key) {
+            $pattern = '/<tr>\s*<td[^>]*>\s*' . preg_quote($label, '/') . '\s*<\/td>\s*<td[^>]*>\s*(.*?)\s*<\/td>/i';
+            if (preg_match($pattern, $html, $matches)) {
+                // Se limpia el valor removiendo etiquetas HTML y espacios adicionales
+                $data[$key] = trim(strip_tags($matches[1]));
+            } else {
+                // Si no se encuentra alguno de los campos, se asigna null
+                $data[$key] = null;
+            }
+        }
+
+        return [
+            'success' => true,
+            'data' => $data
+        ];
     }
 
     /**
@@ -118,7 +162,6 @@ class FoliosService
             return null;
         }
     }
-
 
     /**
      * Extrae el nombre del certificado desde la información analizada
@@ -278,7 +321,7 @@ class FoliosService
             // Obtener rutEmpresa y dvEmpresa
             [$rutEmpresa, $dvEmpresa] = explode(
                 '-',
-                str_replace('.', '', $this->rutEmpresa),
+                str_replace('.', '', $this->rutEmpresa)
             );
             $this->log("RUT empresa: $rutEmpresa-$dvEmpresa");
 
@@ -322,25 +365,23 @@ class FoliosService
             }
             $this->log("Generación de archivo de folios exitosa");
 
-            // Almacenar archivo con nombre descriptivo
+            // Almacenar archivo con estructura: ambiente/rut/tipo_folio/DESDE{folioInicial}_HASTA{folioFinal}.xml
             $content = $foliosArchivo['content'];
-            if (!file_exists($this->foliosPath)) {
-                mkdir($this->foliosPath, 0755, true);
-                $this->log("Creado directorio para folios: " . $this->foliosPath);
+
+            // Formatear el RUT (remover puntos y guiones)
+            $rutFormateado = str_replace(['.', '-'], ['', '_'], $this->rutEmpresa);
+
+            // Construir la ruta del directorio
+            $path = sprintf("%s/%s/%s/%s", rtrim($this->foliosPath, '/'), $this->servidor, $rutFormateado, $params['tipoDte']);
+
+            // Crear el directorio si no existe
+            if (!file_exists($path)) {
+                mkdir($path, 0755, true);
+                $this->log("Creado directorio para folios en ruta: " . $path);
             }
 
-            // Crear un nombre de archivo más descriptivo
-            $timestamp = date('Ymd_His');
-            $rutFormateado = str_replace(['.', '-'], ['', '_'], $this->rutEmpresa);
-            $filename = sprintf(
-                "%s/CAF_%s_TIPO%s_DESDE%s_HASTA%s_%s.xml",
-                $this->foliosPath,
-                $rutFormateado,
-                $params['tipoDte'],
-                $params['folioInicial'],
-                $params['folioFinal'],
-                $timestamp
-            );
+            // Generar el nombre del archivo
+            $filename = sprintf("%s/DESDE%s_HASTA%s.xml", $path, $params['folioInicial'], $params['folioFinal']);
 
             file_put_contents($filename, $content);
             $this->log("Archivo de folios guardado en: " . $filename);
@@ -390,7 +431,7 @@ class FoliosService
                     'dv' => explode('-', $this->rutCert)[1],
                 ],
                 'cookies' => $cookies,
-            ],
+            ]
         );
 
         $responseCode = $response->getStatusCode();
@@ -536,6 +577,21 @@ class FoliosService
         $this->log("Analizando respuesta de confirmación de folios");
         $parsed = $this->parseResponse($responseBody);
 
+        // Se verifica que exista la sección "Timbraje Anterior"
+        if ($parsed['success'] === true) {
+            $timbraje = $this->parseTimbrajeAnterior($responseBody);
+            if (!$timbraje['success']) {
+                $this->log("Confirmación de folios fallida: timbraje anterior no encontrado", $timbraje);
+                return [
+                    'success' => false,
+                    'message' => 'Error al obtener la cantidad de folios disponibles de SII',
+                    'code' => 'of_confirma_folio'
+                ];
+            }
+            // Se agrega la información extraída a la respuesta
+            $parsed['timbraje'] = $timbraje['data'];
+        }
+
         if ($responseCode != 200 || $parsed['success'] === false) {
             $this->log("Confirmación de folios fallida", $parsed);
             return [
@@ -548,7 +604,8 @@ class FoliosService
         $this->log("Confirmación de folios exitosa");
         return [
             'success' => true,
-            'message' => 'Confirmación de folios exitosa'
+            'message' => 'Confirmación de folios exitosa',
+            'timbraje' => $parsed['timbraje']
         ];
     }
 
